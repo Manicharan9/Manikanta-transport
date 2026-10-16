@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manikanta Transport — Bill Generator</title>
+<style>
+  :root { color-scheme: light; font-family: Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: #f1f4f8; color: #172033; }
+  .app { max-width: 760px; margin: auto; background: #fff; padding: 22px; border-radius: 14px; box-shadow: 0 4px 22px #14243b18; }
+  h1 { margin: 0; text-align: center; font-size: 25px; }
+  .sub { text-align: center; color: #64748b; margin: 8px 0 22px; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 13px; }
+  label { display: block; font-size: 13px; font-weight: 700; }
+  input { width: 100%; margin-top: 6px; padding: 11px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; background: white; color: #111827; }
+  .full { grid-column: 1 / -1; }
+  .summary { margin-top: 18px; background: #f3f7fc; border-radius: 10px; padding: 14px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+  .summary span { display: block; color: #64748b; font-size: 12px; margin-bottom: 5px; }
+  .summary strong { font-size: 17px; overflow-wrap: anywhere; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  button { border: 0; border-radius: 8px; padding: 12px 15px; font-weight: 700; font-size: 15px; cursor: pointer; }
+  .primary { background: #173b65; color: white; }
+  .secondary { background: #e8edf4; color: #172033; }
+  .note { font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 14px; }
+  #status { font-size: 13px; margin-top: 10px; }
+  #saveGenerated { display:none; margin-top:10px; }
+  #saveGenerated a { display:inline-block; color:#173b65; font-weight:700; padding:10px 0; }
+  @media(max-width:560px) { body { padding: 8px; } .app { padding: 15px; } .grid { grid-template-columns: 1fr; } .full { grid-column: auto; } .summary { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main class="app">
+  <h1>MANIKANTA TRANSPORT</h1>
+  <div class="sub">Road Challan — Bill Generator</div>
+
+  <div class="grid">
+    <label>Bill No.
+      <input id="billNo" value="912" inputmode="numeric" placeholder="912">
+    </label>
+    <label>Date
+      <input id="date" type="date">
+    </label>
+    <label class="full">Truck No.
+      <input id="truckNo" value="AP 16 TE 4499" placeholder="Truck registration number">
+    </label>
+    <label>Quantity (in MT)
+      <input id="quantity" type="number" min="0" step="0.01" value="25" oninput="calculate()">
+    </label>
+    <label>Rate (in Rs.)
+      <input id="rate" type="number" min="0" step="0.01" value="8000" oninput="calculate()">
+    </label>
+    <label>Advance (in Rs.)
+      <input id="advance" type="number" min="0" step="0.01" value="100000" oninput="calculate()">
+    </label>
+    <label>From
+      <input id="from" value="Nalgonda, Telangana">
+    </label>
+    <label>To
+      <input id="to" value="Samtse, Bhutan">
+    </label>
+    <label class="full">Name of Party
+      <input id="party" value="Shabhari Charcoal Traders">
+    </label>
+    <label class="full">Address
+      <input id="address" value="Nalgonda">
+    </label>
+  </div>
+
+  <div class="summary">
+    <div><span>Truck Freight / Goods Amount</span><strong id="freightText">₹2,00,000.00</strong></div>
+    <div><span>Total</span><strong id="totalText">₹2,00,000.00</strong></div>
+    <div><span>Due</span><strong id="dueText">₹1,00,000.00</strong></div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" onclick="makePdf()">Generate PDF</button>
+    <button class="secondary" onclick="saveDraft()">Save draft on this device</button>
+    <button class="secondary" onclick="newBill()">New bill</button>
+  </div>
+  <div id="status" role="status" aria-live="polite"></div>
+  <div id="saveGenerated"><a id="openPdf" href="#" target="_blank" rel="noopener">Open generated PDF to save to Files</a></div>
+  <p class="note">
+    Template requirement: upload the original PDF into this same GitHub repository and name it
+    <b>MT-912.pdf</b>. This page uses it as the base. PDF export replaces only the variable text areas while keeping the original table lines, truck illustration, and signature. Check the first generated PDF carefully before using it for official bills.
+    Drafts are stored only in this browser/device; they do not sync to other devices.
+  </p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const money = n => (Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+function values() {
+  const quantity = Number($('quantity').value)||0;
+  const rate = Number($('rate').value)||0;
+  const freight = quantity * rate;
+  const advance = Number($('advance').value)||0;
+  return {quantity,rate,freight,total:freight,due:freight-advance,advance};
+}
+function calculate() {
+  const v=values();
+  $('freightText').textContent='₹'+money(v.freight);
+  $('totalText').textContent='₹'+money(v.total);
+  $('dueText').textContent='₹'+money(v.due);
+}
+function say(message){$('status').textContent=message;}
+function saveDraft() {
+  const data={};
+  document.querySelectorAll('input').forEach(i=>data[i.id]=i.value);
+  localStorage.setItem('manikantaTransportDraft',JSON.stringify(data));
+  say('Draft saved on this device.');
+}
+function newBill() {
+  if(!confirm('Start a new bill? Save the current bill first if required.')) return;
+  const next=(parseInt($('billNo').value,10)||0)+1;
+  $('billNo').value=String(next);
+  $('quantity').value='';
+  $('rate').value='';
+  $('advance').value='';
+  $('truckNo').value='';
+  calculate();
+}
+function pdfText(page, text, x, y, size=10) {
+  page.drawText(String(text), {x, y, size, font:window.__pdfFont, color:window.__pdfColor});
+}
+function white(page,x,y,w,h) {
+  page.drawRectangle({x,y,width:w,height:h,color:PDFLib.rgb(1,1,1)});
+}
+async function makePdf() {
+  if(!window.PDFLib){say('PDF library did not load. Check your internet connection and try again.');return;}
+  const btn=document.querySelector('.primary');
+  btn.disabled=true; $('saveGenerated').style.display='none'; say('Generating PDF…');
+  let objectUrl='';
+  try {
+    const response=await fetch('./MT-912.pdf');
+    if(!response.ok) throw new Error('Could not load MT-912.pdf. Upload the original PDF to the repository root with this exact filename.');
+    const pdfDoc=await PDFLib.PDFDocument.load(await response.arrayBuffer());
+    const page=pdfDoc.getPages()[0];
+    const font=await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+    const black=PDFLib.rgb(0,0,0);
+    const v=values();
+    const bill=$('billNo').value.trim()||'1';
+    const date=$('date').value ? $('date').value.split('-').reverse().join('-') : '';
+    const truck=$('truckNo').value.trim();
+    const fmt=n=>money(n);
+    const white=(x,y,w,h)=>page.drawRectangle({x,y,width:w,height:h,color:PDFLib.rgb(1,1,1)});
+    const drawCentered=(text,x,y,w,size=10)=>{
+      let s=size;
+      while(s>7 && font.widthOfTextAtSize(String(text),s)>w-4) s-=0.25;
+      const tw=font.widthOfTextAtSize(String(text),s);
+      page.drawText(String(text),{x:x+(w-tw)/2,y,size:s,font,color:black});
+    };
+    const draw=(text,x,y,size=10)=>page.drawText(String(text),{x,y,size,font,color:black});
+
+    white(440,758,95,16); draw('BILL NO:'+bill,451,762,11);
+    white(178,548,64,17); drawCentered(v.quantity.toFixed(2),178,549,64,10);
+    white(266,548,79,17); drawCentered(v.rate.toFixed(2),266,549,79,10);
+    white(400,548,130,17); drawCentered(fmt(v.freight),400,549,130,10);
+    white(400,459,130,17); drawCentered(fmt(v.total),400,460,130,10);
+    white(400,424,130,17); drawCentered(fmt(v.advance),400,425,130,10);
+    white(400,389,130,17); drawCentered(fmt(v.due),400,390,130,10);
+    white(39,351,165,17); draw('Truck No : '+truck,42,351,11);
+    white(39,326,165,17); draw('Date      : '+date,42,326,11);
+
+    const bytes=await pdfDoc.save();
+    const filename='MT-'+bill+'.pdf';
+    const blob=new Blob([bytes],{type:'application/pdf'});
+    objectUrl=URL.createObjectURL(blob);
+    const openLink=$('openPdf');
+    openLink.href=objectUrl;
+    openLink.download=filename;
+    $('saveGenerated').style.display='block';
+
+    // iOS Safari often ignores automatic downloads. Prefer the native Share sheet,
+    // which lets the user choose Save to Files and preserves the intended filename.
+    const file=new File([blob],filename,{type:'application/pdf'});
+    if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
+      try {
+        await navigator.share({files:[file], title:filename});
+        say(filename+' is ready. In the share sheet, choose Save to Files.');
+      } catch(shareErr) {
+        if(shareErr && shareErr.name==='AbortError') {
+          say('PDF generated. Tap “Open generated PDF to save to Files”, then tap Share → Save to Files.');
+        } else {
+          say('PDF generated. Tap “Open generated PDF to save to Files”, then tap Share → Save to Files.');
+        }
+      }
+    } else {
+      // Fallback for browsers without file sharing: expose a user-tapped link.
+      say('PDF generated. Tap “Open generated PDF to save to Files”, then tap Share → Save to Files.');
+    }
+  } catch(err) {
+    say(err.message||'Could not generate the PDF.');
+  } finally {btn.disabled=false;}
+}
+(function(){
+  $('date').value=new Date().toISOString().slice(0,10);
+  try{
+    const saved=JSON.parse(localStorage.getItem('manikantaTransportDraft')||'null');
+    if(saved) Object.keys(saved).forEach(k=>{if($(k))$(k).value=saved[k];});
+  }catch(e){}
+  calculate();
+})();
+</script>
+</body>
+</html>
